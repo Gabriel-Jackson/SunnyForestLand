@@ -1,11 +1,15 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
     private Animator        _playerAnimator;
     private Rigidbody2D     _playerRigidbody2D;
+
+    private SpriteRenderer  _playerSpriteRenderer;
 
     public Transform        groundCheck;
     public bool             isGround;
@@ -16,15 +20,25 @@ public class PlayerController : MonoBehaviour
 
     public bool             facingRight = true;
 
+    public int              qtdVida = 3;
+    public bool             playerInvencivel;
     public bool             jump = false;
 
     public int              jumpsCount = 0;
     public int              maxJumps    = 2;
     public float            jumpForce;
 
+    
+    public AudioSource      gameFX;
+    public AudioClip        puloFX;
 
     private GameController  _gameController;
 
+    public Color            hitColor;
+
+    public GameObject       playerDie;
+
+    public ParticleSystem   poeira;
     // Start is called before the first frame update
     void Start()
     {
@@ -32,7 +46,12 @@ public class PlayerController : MonoBehaviour
 
         _playerRigidbody2D = GetComponent<Rigidbody2D>();
 
+        _playerSpriteRenderer = GetComponent<SpriteRenderer>();
+
         _gameController = FindObjectOfType(typeof(GameController)) as GameController;
+
+        _gameController.BarraVida(qtdVida);
+
     }
 
     // Update is called once per frame
@@ -62,12 +81,16 @@ public class PlayerController : MonoBehaviour
     void JumpPlayer(){
         if(isGround){
             jumpsCount = 0;
+            CriarPoeira();
         }
         if(isGround || jumpsCount < maxJumps){
             _playerRigidbody2D.AddForce(new Vector2(0f, jumpForce));
             isGround = false;
             jumpsCount ++;
 
+            gameFX.PlayOneShot(puloFX);
+
+            CriarPoeira();
         }
 
         jump = false;
@@ -82,6 +105,8 @@ public class PlayerController : MonoBehaviour
         if((hMovement < 0 && facingRight) || (hMovement > 0 && !facingRight)){
             Flip();
         }
+
+        
     }
 
     void Flip(){
@@ -92,6 +117,8 @@ public class PlayerController : MonoBehaviour
                 transform.localScale.y,
                 transform.localScale.z
             );
+
+            CriarPoeira();
     }
 
     void SetMovements(){
@@ -109,6 +136,89 @@ public class PlayerController : MonoBehaviour
                 _gameController.Pontuacao(1);
                 Destroy(colisao.gameObject);
                 break;
+            case "Inimigo":
+                GameObject tmpExplosao = Instantiate(_gameController.hitPrefab, colisao.transform.position, transform.localRotation);
+                Destroy(tmpExplosao, 0.5f);
+
+                Rigidbody2D rb = GetComponentInParent<Rigidbody2D>();
+                rb.velocity = new Vector2(rb.velocity.x, 0);
+
+                rb.AddForce(new Vector2(0, 700));
+
+                _gameController.gameFX.PlayOneShot(_gameController.explosaoFX);
+                Destroy(colisao.gameObject.transform.parent.gameObject);
+
+                break;
+            case "Damage":
+                Hurt();
+                break;
         }
+    }
+
+    void OnCollisionEnter2D(Collision2D colisao){
+        switch (colisao.gameObject.tag){
+            case "Plataforma":
+                this.transform.parent = colisao.transform;
+                break;
+            case "Inimigo":
+                Hurt();
+                break;
+        }
+    }
+
+    void OnCollisionExit2D(Collision2D colisao){
+        switch (colisao.gameObject.tag){
+            case "Plataforma":
+                this.transform.parent = null;
+                break;
+        }
+    }
+    void Hurt(){
+        if(!playerInvencivel){
+            playerInvencivel = true;
+
+            qtdVida --;
+            
+            StartCoroutine("Dano");
+
+            _gameController.BarraVida(qtdVida);
+
+            if(qtdVida < 1){
+                GameObject pDieTemp = Instantiate(playerDie, transform.position, Quaternion.identity);
+                Rigidbody2D rbDie = pDieTemp.GetComponent<Rigidbody2D>();
+
+                rbDie.AddForce(new Vector2(150f, 500f));
+
+                _gameController.gameFX.PlayOneShot(_gameController.dieFX);
+
+                Invoke("CarregaJogo",2.5f);
+                gameObject.SetActive(false);
+            }
+            
+            
+        }
+    }
+
+    void CarregaJogo(){
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+    IEnumerator Dano(){
+        _playerSpriteRenderer.color = hitColor;
+        yield return new WaitForSeconds(0.1f);
+
+        for(float i =0;i <1; i+=0.1f){
+            _playerSpriteRenderer.enabled = false;
+            yield return new WaitForSeconds(0.1f);
+            _playerSpriteRenderer.enabled = true;
+            yield return new WaitForSeconds(0.1f);
+        }
+        
+        _playerSpriteRenderer.color = Color.white;
+        playerInvencivel = false;
+
+    }
+
+    void CriarPoeira(){
+        poeira.Play();
     }
 }
