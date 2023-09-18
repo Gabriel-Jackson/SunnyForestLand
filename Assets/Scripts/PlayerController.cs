@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-
+using UnityEngine.InputSystem;
 public class PlayerController : MonoBehaviour
 {
     private Animator        _playerAnimator;
@@ -39,6 +39,9 @@ public class PlayerController : MonoBehaviour
     public GameObject       playerDie;
 
     public ParticleSystem   poeira;
+
+    public PlayerInput playerInput;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -52,21 +55,29 @@ public class PlayerController : MonoBehaviour
 
         _gameController.BarraVida(qtdVida);
 
+        playerInput = GetComponent<PlayerInput>();
+
     }
 
     // Update is called once per frame
     void Update()
     {
-        isGround = Physics2D.Linecast(
-            transform.position, 
+        isGround = Physics2D.BoxCast(
             groundCheck.position, 
+            groundCheck.GetComponent<BoxCollider2D>().size,
+            0,
+            Vector2.down, 
+            0.02f,
             1 << LayerMask.NameToLayer("Ground")
         );
-        touchRun = Input.GetAxisRaw("Horizontal");
 
-        if(Input.GetButtonDown("Jump")){
+
+        touchRun = playerInput.actions["Move"].ReadValue<Vector2>().x;
+        
+        Debug.Log(playerInput.actions["Move"].IsInProgress());
+        playerInput.actions["Jump"].performed += ctx => {
             jump = true;
-        }
+        };
         SetMovements();
     }
 
@@ -131,7 +142,10 @@ public class PlayerController : MonoBehaviour
     void OnTriggerEnter2D(Collider2D colisao){
 
         switch (colisao.gameObject.tag)
-        {
+        {   
+            case "Ground":
+                isGround = true;
+                break;
             case "Coletavel":
                 _gameController.Pontuacao(1);
                 Destroy(colisao.gameObject);
@@ -151,6 +165,14 @@ public class PlayerController : MonoBehaviour
                 break;
             case "Damage":
                 Hurt();
+                break;
+        }
+    }
+
+    void OnTriggerExit2D(Collider2D colisao){
+        switch(colisao.gameObject.tag){
+            case "Ground":
+                isGround = false;
                 break;
         }
     }
